@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<alto xmlns="http://www.loc.gov/standards/alto/ns-v4#">
+  <Description>
+    <MeasurementUnit>pixel</MeasurementUnit>
+    <sourceImageInformation>
+      <fileName>manuscript_0002_folio_014r.tif</fileName>
+    </sourceImageInformation>
+  </Description>
+  <Layout>
+    <Page ID="page_1" WIDTH="1400" HEIGHT="2000">
+      <PrintSpace HPOS="0" VPOS="0" WIDTH="1400" HEIGHT="2000">
+        <TextBlock ID="block_1">
+          <TextLine ID="line_1" HPOS="175" VPOS="222" WIDTH="1040" HEIGHT="66" BASELINE="175 280 1215 270">
+            <String CONTENT="دولت" HPOS="850" VPOS="225" WIDTH="365" HEIGHT="60"/>
+            <SP WIDTH="30"/>
+            <String CONTENT="عالیه" HPOS="500" VPOS="225" WIDTH="320" HEIGHT="61"/>
+          </TextLine>
+          <TextLine ID="line_2" HPOS="170" VPOS="310" WIDTH="1040" HEIGHT="70" BASELINE="170 375 1210 365">
+            <String CONTENT="علم" HPOS="950" VPOS="315" WIDTH="255" HEIGHT="60"/>
+            <String CONTENT="و" HPOS="880" VPOS="320" WIDTH="55" HEIGHT="50"/>
+            <String CONTENT="عرفان" HPOS="520" VPOS="312" WIDTH="335" HEIGHT="66"/>
+          </TextLine>
+        </TextBlock>
+      </PrintSpace>
+    </Page>
+  </Layout>
+</alto>
