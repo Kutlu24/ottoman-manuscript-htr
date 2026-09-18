@@ -61,30 +61,61 @@ def import_via_project(via_json_path: str | Path, annotation_dir: str | Path, ou
         char_regions = [r for r in regions if r["region_attributes"].get("level") == "char"]
         dot_regions = [r for r in regions if r["region_attributes"].get("level") == "dot"]
 
+        def _chars_in(parent_bbox: BBox) -> list[CharAnnotation]:
+            region_chars = sorted(
+                (c for c in char_regions if _center_in_bbox(c, parent_bbox)),
+                key=lambda c: -c["shape_attributes"]["x"],  # RTL: rightmost char first
+            )
+            chars = []
+            for c in region_chars:
+                c_bbox = _bbox_of(c)
+                dots = [
+                    Point(x=round(cx, 1), y=round(cy, 1))
+                    for cx, cy in (_center_of(d) for d in dot_regions)
+                    if c_bbox.x0 <= cx <= c_bbox.x1 and c_bbox.y0 <= cy <= c_bbox.y1
+                ]
+                label = c["region_attributes"].get("text") or None
+                chars.append(CharAnnotation(bbox=c_bbox, label=label, dot_points=dots))
+            return chars
+
         new_lines = []
         for line in page.lines:
             line_words = [w for w in word_regions if _center_in_bbox(w, line.bbox)]
-            words = []
-            for w in line_words:
-                w_bbox = _bbox_of(w)
-                w_chars = sorted(
-                    (c for c in char_regions if _center_in_bbox(c, w_bbox)),
-                    key=lambda c: -c["shape_attributes"]["x"],  # RTL: rightmost char first
-                )
-                chars = []
-                for c in w_chars:
-                    c_bbox = _bbox_of(c)
-                    dots = [
+            line_dots_direct: list[Point] = []
+            if line_words:
+                # Word-level boxes genuinely drawn for this line -- full
+                # word -> char -> dot nesting.
+                words = []
+                for w in line_words:
+                    w_bbox = _bbox_of(w)
+                    words.append(WordAnnotation(bbox=w_bbox, text=w["region_attributes"].get("text", ""), chars=_chars_in(w_bbox)))
+                words.sort(key=lambda w: -w.bbox.x0)  # RTL: rightmost word first, matching data/example/README.md
+            else:
+                line_chars = [c for c in char_regions if _center_in_bbox(c, line.bbox)]
+                if line_chars:
+                    # Char-level boxes drawn directly against the line (no
+                    # word boxes) -- one synthetic whole-line WordAnnotation
+                    # so the schema is unchanged.
+                    words = [WordAnnotation(bbox=line.bbox, text=line.text, chars=_chars_in(line.bbox))]
+                else:
+                    # Neither word nor char boxes -- the actual Tier-2
+                    # scope for this corpus (docs/corpus_collection_plan.md):
+                    # word and even character boundaries are not reliably
+                    # determinable by eye in this connected cursive hand.
+                    # Dots are annotated directly against the line.
+                    words = []
+                    line_dots_direct = [
                         Point(x=round(cx, 1), y=round(cy, 1))
-                        for cx, cy in (_center_of(d) for d in dot_regions)
-                        if c_bbox.x0 <= cx <= c_bbox.x1 and c_bbox.y0 <= cy <= c_bbox.y1
+                        for cx, cy in (_center_of(d) for d in dot_regions if _center_in_bbox(d, line.bbox))
                     ]
-                    label = c["region_attributes"].get("text") or None
-                    chars.append(CharAnnotation(bbox=c_bbox, label=label, dot_points=dots))
-                words.append(WordAnnotation(bbox=w_bbox, text=w["region_attributes"].get("text", ""), chars=chars))
-            words.sort(key=lambda w: -w.bbox.x0)  # RTL: rightmost word first, matching data/example/README.md
             new_lines.append(
-                LineAnnotation(bbox=line.bbox, text=line.text, baseline_angle_deg=line.baseline_angle_deg, words=words)
+                LineAnnotation(
+                    bbox=line.bbox,
+                    text=line.text,
+                    baseline_angle_deg=line.baseline_angle_deg,
+                    words=words,
+                    dot_points=line_dots_direct,
+                )
             )
 
         updated = PageAnnotation(

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from ottoman_htr.data.validate import validate_directory
-from ottoman_htr.geometry.features import line_geometry_vector
+from ottoman_htr.geometry.features import LINE_GEOMETRY_DIM, line_geometry_vector
 
 EXAMPLE_DIR = Path(__file__).parent.parent / "data" / "example"
 
@@ -22,5 +22,5 @@ def test_example_line_geometry_is_well_formed():
     page = PageAnnotation.from_json(report_path)
     for line in page.lines:
         vec = line_geometry_vector(line)
-        assert vec.shape == (13,)
+        assert vec.shape == (LINE_GEOMETRY_DIM,)
         assert vec[0] > 0  # line width

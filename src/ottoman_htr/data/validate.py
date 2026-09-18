@@ -16,6 +16,8 @@ class ValidationReport:
     n_chars: int = 0
     n_chars_with_label: int = 0
     n_chars_with_dots: int = 0
+    n_lines_with_direct_dots: int = 0  # LineAnnotation.dot_points -- see schema.py
+    n_dots_direct: int = 0
     errors: list[str] | None = None
 
     def __post_init__(self):
@@ -37,6 +39,9 @@ def validate_directory(annotation_dir: str | Path) -> ValidationReport:
         report.n_pages += 1
         for line in page.lines:
             report.n_lines += 1
+            if line.dot_points:
+                report.n_lines_with_direct_dots += 1
+                report.n_dots_direct += len(line.dot_points)
             for word in line.words:
                 report.n_words += 1
                 for char in word.chars:
@@ -57,7 +62,8 @@ def main() -> None:
     print(
         f"pages={report.n_pages} lines={report.n_lines} words={report.n_words} "
         f"chars={report.n_chars} labeled_chars={report.n_chars_with_label} "
-        f"chars_with_dots={report.n_chars_with_dots}"
+        f"chars_with_dots={report.n_chars_with_dots} "
+        f"lines_with_direct_dots={report.n_lines_with_direct_dots} dots_direct={report.n_dots_direct}"
     )
     if report.errors:
         print(f"\n{len(report.errors)} file(s) failed to parse:", file=sys.stderr)

@@ -9,7 +9,7 @@ class VisionConfig:
 
 @dataclass
 class GeometryConfig:
-    feature_dim: int = 25  # see geometry.features.GEOMETRY_DIM
+    feature_dim: int = 21  # see geometry.features.GEOMETRY_DIM
     embed_dim: int = 256
 
 

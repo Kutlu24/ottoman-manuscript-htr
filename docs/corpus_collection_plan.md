@@ -115,42 +115,85 @@ So MAKHZAN alone is enough for the **core ablation** (Model A/B/C all operate at
 
 ## Tier-2 annotation workflow
 
-1. **Generate the VIA project** (already done for the 24-page subset;
-   `data/raw/makhzan/tier2_via_project.json`, `--project-name` is just a label):
-   ```bash
-   python -m ottoman_htr.data.via_export data/raw/makhzan/tier2_subset data/raw/makhzan/tier2_via_project.json
-   ```
-2. **Download VIA** (one HTML file, no install, fully offline) from
-   [robots.ox.ac.uk/~vgg/software/via](https://www.robots.ox.ac.uk/~vgg/software/via/) and open
-   it in a browser.
-3. **Load the project**: File → Load, pick `tier2_via_project.json`. VIA will ask you to locate
-   the images it references (it stores filenames, not image bytes) — point it at
-   `data/raw/makhzan/tier2_subset/images/`.
-4. **Annotate.** Every line already has a yellow reference box (`level=line`) showing where and
-   what the line's full transcription is — don't move or delete these. For each line, draw:
-   - one `rect` region per **word**, `level=word`, `text` = that word exactly as written (RTL:
-     draw them in any order, the converter re-derives reading order from x-position, not draw
-     order);
-   - one `rect` region per **character** inside its word's box, `level=char`, `text` = the single
-     character;
-   - one `point` region per **diacritical dot** inside its character's box, `level=dot`, `text`
-     left empty. Dots are systematically omitted in dîvânî/siyâkat-adjacent hands but present in
-     the Naskh-dominant Tier-1 corpus this subset is drawn from — mark what's actually visible,
-     don't infer missing ones.
+**Revised 2026-09-18, after a real pilot.** The original plan below (word →
+char → dot, all hand-drawn) turned out not to match this corpus. Piloting it
+on the smallest page (`89_12037`, 7 lines) found, with real evidence (pixel
+density analysis, not just impression):
 
-   Nesting is entirely by geometry: a region's *center point* falling inside its parent's box is
-   what the importer uses to reconstruct word → char → dot parentage, not draw order or any VIA
-   grouping feature (VIA has none). Slightly overlapping neighbor boxes are fine as long as each
-   center point lands in the right parent.
-5. **Export**: Annotation → Export Annotations (as json).
-6. **Merge back into `PageAnnotation` JSON**:
+- **Word boundaries are not reliably determinable by eye.** Binarizing a
+  line and looking for full-height ink gaps found only one genuine gap in a
+  570px, 5-word line — the rest connect via a running baseline ligature.
+  This is standard for this style of Ottoman cursive, not a defect of this
+  one scribe.
+- **Character boundaries aren't either, for the same reason.** Medial
+  Arabic-script letterforms are designed to connect via an unbroken stroke.
+  This is also *why the model uses CTC loss* — CTC exists precisely to avoid
+  needing pre-segmented characters, which the geometric-embedding feature
+  vector had been implicitly assuming were annotatable.
+- **Dots are the one thing that stayed tractable** — visually discrete,
+  small, blob-shaped, distinguishable from connecting strokes at ~8–10×
+  zoom. Confirmed against real examples (e.g. the two dots of ت in
+  "دستانى", found independently by both eye and a pixel connected-component
+  check).
+
+**Schema change to match:** `LineAnnotation` gained `dot_points` (dots
+attached directly to the line, no word/char attribution — see
+`src/ottoman_htr/data/schema.py`). `line_geometry_vector` was redesigned
+around this (`GEOMETRY_DIM` 25 → 21, `LINE_GEOMETRY_DIM` 13 → 9): word/char
+box-derived dimensions are gone; `n_chars` now comes from the line's own
+transcription text (already correct, Tier-1, no annotation needed) instead
+of a promised-but-unreliable character count; `n_dots` and its distribution
+across line-thirds are the real new signal. `via_import.py` falls back
+word → char-on-line → dot-on-line depending on what an annotator actually
+drew, so nothing here forces a rewrite if a future page *does* get clean
+word/char boxes.
+
+**Semi-automated candidate generation, not blind hand-drawing.** Hand-
+placing ~6,000+ dots across 446 lines was estimated (from real per-line
+pacing) at 40–80+ hours either way (human or AI-assisted). Built instead:
+a connected-component blob detector over each line (`scipy.ndimage.label`
+on an adaptively-binarized crop), filtered by shape/position **relative to
+line height** (dot-like candidates are small, roughly square, and not in
+the top/bottom ~6% of the line — that edge zone is dominated by ascender
+tips and neighbouring-line bleed). Relative, not absolute-pixel, thresholds
+matter: this corpus's 24 pages come from 9 different repositories with
+visibly different scan resolutions, and an absolute-pixel filter calibrated
+on one page silently starved higher-resolution pages of real detections.
+
+Result: 28,108 raw connected components across 24 pages → 5,909 filtered
+candidates (`data/raw/makhzan/tier2_dot_candidates_via_project.json`, a
+real VIA2 project with every candidate as a `level=dot` point region
+alongside the existing `level=line` reference boxes).
+
+**Honest accuracy, from real sampling (not assumed):** spot-checked against
+several lines across 3 different pages. Precision is inconsistent,
+page-dependent — roughly 25–80% depending on scribal density and scan
+quality — and recall has real gaps, especially for lines using
+Ottoman-specific letters that carry more/less common dot patterns (e.g. چ,
+ق). **This is a draft, not ground truth.** It cuts the task from
+"draw ~6,000 points from nothing" to "review ~6,000 pre-placed points and
+delete the wrong ones" — materially faster, but a human confirmation pass
+is still required before trusting it.
+
+1. **Open** `data/raw/makhzan/tier2_dot_candidates_via_project.json` in VIA
+   ([robots.ox.ac.uk/~vgg/software/via](https://www.robots.ox.ac.uk/~vgg/software/via/)),
+   pointing it at `data/raw/makhzan/tier2_subset/images/` when asked.
+2. **Review, don't draw from scratch.** Each line's yellow reference box is
+   still there; red dot points are the candidates. Delete false positives
+   (common near line edges), add any obviously missed dots. Zoom in — at
+   normal view many of these are too small to judge confidently.
+3. **Export → merge**, same as before:
    ```bash
    python -m ottoman_htr.data.via_import path/to/export.json data/raw/makhzan/tier2_subset data/raw/makhzan/tier2_annotated
    python -m ottoman_htr.data.validate data/raw/makhzan/tier2_annotated
    ```
-   `via_import` only rewrites pages actually present in the export (so partial/incremental
-   annotation sessions are safe to merge repeatedly) and symlinks each page's image into the
-   output directory, so `tier2_annotated/` is immediately usable with `OttomanLineDataset`.
+   `validate` now also reports `lines_with_direct_dots`/`dots_direct` for
+   this annotation shape.
+
+The candidate-generation pipeline itself lives in
+`scripts/tier2_dot_review.py` (not part of the installed package — a
+working tool for this one task, kept for whoever does the confirmation
+pass, or for regenerating candidates if the filter is retuned).
 
 ## Open questions
 

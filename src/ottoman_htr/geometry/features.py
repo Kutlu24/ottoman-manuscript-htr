@@ -5,7 +5,7 @@ from scipy import ndimage
 
 from ..data.schema import LineAnnotation
 
-LINE_GEOMETRY_DIM = 13
+LINE_GEOMETRY_DIM = 9
 IMAGE_GEOMETRY_DIM = 12
 GEOMETRY_DIM = LINE_GEOMETRY_DIM + IMAGE_GEOMETRY_DIM
 
@@ -50,39 +50,61 @@ def baseline_slope(mask: np.ndarray) -> float:
     return float(slope)
 
 
+def _all_dot_points(line: LineAnnotation) -> list[tuple[float, float]]:
+    """Dots annotated directly on the line (the real Tier-2 target -- see
+    LineAnnotation.dot_points) plus any nested under word/char boxes, for
+    pages where those were genuinely drawn. Word/char boundaries
+    themselves are NOT used as features here -- see the redesign note
+    below."""
+    points = [(p.x, p.y) for p in line.dot_points]
+    points += [(p.x, p.y) for w in line.words for c in w.chars for p in c.dot_points]
+    return points
+
+
 def line_geometry_vector(line: LineAnnotation) -> np.ndarray:
-    """Layout-only summary from the annotation alone (word/char boxes, dot counts) -- no pixels needed."""
-    word_widths = [w.bbox.width for w in line.words]
-    word_gaps = [line.words[i + 1].bbox.x0 - line.words[i].bbox.x1 for i in range(len(line.words) - 1)]
-    char_widths = [c.bbox.width for w in line.words for c in w.chars]
-    n_chars = sum(len(w.chars) for w in line.words)
-    n_dots = sum(len(c.dot_points) for w in line.words for c in w.chars)
+    """Layout-only summary from the annotation alone -- no pixels needed.
 
-    def _stats(values: list[float]) -> tuple[float, float]:
-        if not values:
-            return 0.0, 0.0
-        arr = np.asarray(values, dtype=np.float32)
-        return float(arr.mean()), float(arr.std())
+    Redesigned around what Tier-2 annotation actually produces for this
+    corpus (docs/corpus_collection_plan.md): word and even character
+    bounding boxes are not reliably determinable by eye in connected
+    Ottoman cursive hands (this is a property of Arabic-script cursive
+    writing -- medial letterforms are designed to connect via an
+    unbroken ligature stroke -- not a defect specific to any one
+    scribe), so this vector no longer depends on them. What is real and
+    used:
+      - line.bbox.width/height, baseline_angle_deg: from the line box
+        itself (Tier-1, ALTO-derived, no manual annotation needed).
+      - n_chars: from the line's own transcription text, not from a
+        character count promised by visual char boxes -- text is
+        already correct and available (Tier-1) and does not depend on
+        segmentation at all.
+      - n_dots and their distribution across the line: the one thing
+        Tier-2 annotation actually adds here. Dots are visually
+        discrete, unlike connected letterforms, so drawing a point on
+        each visible one is a tractable annotation task -- point
+        annotation, not a segmentation problem.
+    """
+    n_chars = len([c for c in line.text if not c.isspace()])
+    dots = _all_dot_points(line)
+    n_dots = len(dots)
 
-    word_w_mean, word_w_std = _stats(word_widths)
-    gap_mean, gap_std = _stats(word_gaps)
-    char_w_mean, char_w_std = _stats(char_widths)
+    x0, x1 = line.bbox.x0, line.bbox.x1
+    span = (x1 - x0) or 1.0
+    thirds = [0, 0, 0]
+    for x, _y in dots:
+        idx = min(2, max(0, int(((x - x0) / span) * 3)))
+        thirds[idx] += 1
+    third_density = [t / n_dots if n_dots else 0.0 for t in thirds]
 
     return np.array(
         [
             line.bbox.width,
             line.bbox.height,
             line.baseline_angle_deg,
-            float(len(line.words)),
-            word_w_mean,
-            word_w_std,
-            gap_mean,
-            gap_std,
             float(n_chars),
-            char_w_mean,
-            char_w_std,
             float(n_dots),
             n_dots / n_chars if n_chars else 0.0,
+            *third_density,
         ],
         dtype=np.float32,
     )

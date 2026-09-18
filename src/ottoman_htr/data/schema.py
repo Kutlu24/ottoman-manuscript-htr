@@ -48,6 +48,15 @@ class LineAnnotation:
     text: str
     baseline_angle_deg: float = 0.0
     words: list[WordAnnotation] = field(default_factory=list)
+    # Diacritical dots annotated directly against the line, with no word/char
+    # attribution -- see docs/corpus_collection_plan.md's Tier-2 note: word
+    # and even character boundaries are often not reliably determinable by
+    # eye in connected Ottoman cursive hands (letters share connecting
+    # ligature strokes by the nature of the script, not as a defect of any
+    # one scribe), so dot position is the annotation Tier-2 actually asks
+    # for. `words` (and any char-level dot_points nested inside it) remains
+    # for pages where word/char boxes genuinely were drawn.
+    dot_points: list[Point] = field(default_factory=list)
 
 
 @dataclass
@@ -106,4 +115,5 @@ def _line_from_dict(d: dict) -> LineAnnotation:
         text=d["text"],
         baseline_angle_deg=d.get("baseline_angle_deg", 0.0),
         words=[_word_from_dict(w) for w in d.get("words", [])],
+        dot_points=[_point_from_dict(p) for p in d.get("dot_points", [])],
     )
