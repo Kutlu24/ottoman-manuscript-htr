@@ -18,6 +18,7 @@ def convert_ragdb_export(
     min_width: float = 20,
     min_height: float = 10,
     keep_empty: bool = False,
+    exclude_pages: set[str] | frozenset[str] = frozenset(),
     dropped: list[tuple[str, int, str]] | None = None,
 ) -> list[Path]:
     """Converts a page/line export from ottoman-rag's correction tool (one JSON per document under
@@ -33,8 +34,11 @@ def convert_ragdb_export(
     Kraken's segmenter on non-manuscript or low-resolution images emits many junk "lines" (specks,
     stray strokes). Lines are dropped when their box is narrower than `min_width` or shorter than
     `min_height` pixels, or when they have no text (`keep_empty` keeps those); a line a human has
-    already touched (status other than "pending") is never dropped. Each drop is appended to
-    `dropped` as (page_id, line_index, reason) when given. A page left with no lines is skipped."""
+    already touched (status other than "pending") is never dropped. Pages named in `exclude_pages`
+    are skipped outright (e.g. printed rather than handwritten material, which no size filter can
+    detect). Each drop is appended to `dropped` as (page_id, line_index, reason) when given; a
+    skipped page appears once with line_index -1 and reason "excluded_page". A page left with no
+    lines is skipped."""
     export_dir = Path(export_dir)
     images_dir = Path(images_dir)
     output_dir = Path(output_dir)
@@ -49,6 +53,10 @@ def convert_ragdb_export(
     for page_path in sorted((export_dir / "pages").glob("*.json")):
         page_id = page_path.stem
         page_doc = json.loads(page_path.read_text())
+        if page_id in exclude_pages:
+            if dropped is not None:
+                dropped.append((page_id, -1, "excluded_page"))
+            continue
         lines = []
         for doc in sorted(lines_by_page.get(page_id, []), key=lambda d: d["line_index"]):
             x0, y0, x1, y1 = doc["bbox"]
@@ -115,6 +123,10 @@ def main() -> None:
     parser.add_argument("--min-width", type=float, default=20)
     parser.add_argument("--min-height", type=float, default=10)
     parser.add_argument("--keep-empty", action="store_true", help="keep lines with no text")
+    parser.add_argument(
+        "--exclude-page", action="append", default=[], metavar="PAGE_ID",
+        help="skip this page entirely (repeatable), e.g. printed rather than handwritten pages",
+    )
     args = parser.parse_args()
 
     dropped: list[tuple[str, int, str]] = []
@@ -127,11 +139,12 @@ def main() -> None:
         min_width=args.min_width,
         min_height=args.min_height,
         keep_empty=args.keep_empty,
+        exclude_pages=frozenset(args.exclude_page),
         dropped=dropped,
     )
     reasons = Counter(reason for _, _, reason in dropped)
     print(f"wrote {len(written)} PageAnnotation files to {args.output_dir}")
-    print(f"dropped {len(dropped)} junk lines: {dict(reasons)}")
+    print(f"dropped {len(dropped)} lines/pages: {dict(reasons)}")
 
 
 if __name__ == "__main__":

@@ -195,6 +195,26 @@ The candidate-generation pipeline itself lives in
 working tool for this one task, kept for whoever does the confirmation
 pass, or for regenerating candidates if the filter is retuned).
 
+### Importing pages from `ottoman-rag`'s correction tool
+
+`python -m ottoman_htr.data.import_ragdb export_dir images_dir output_dir` converts a page/line
+export from `ottoman-rag`'s correction tool (Kraken boxes + draft text) into `PageAnnotation`
+JSON, so it can go through `via_export` / `dot_candidates` like MAKHZAN pages. Three guards, each
+found on a real 15-page batch rather than assumed:
+
+- **Junk lines** (boxes under 20x10 px, or with no recognized text) are dropped unless a human has
+  already touched them: 996 -> 466 lines. Kraken emits these on low-resolution or non-manuscript
+  scans.
+- **`--exclude-page`** skips pages outright. Needed for printed (Urdu, not handwritten Ottoman)
+  pages: no size filter can tell them apart, only a look at the image.
+- **`dot_candidates` skips pages with median line height under 25 px** (`--min-line-height`). At
+  that size a dot is 2-4 px, the scale of scan grain: on the 190-400 px thumbnails it "found" 15-25
+  dots per line across the whole page. Those pages stay usable for line-level (Tier-1) text.
+
+Detected dots remain a draft. On the two handwritten pages inspected after these guards, most
+marked dots were real, but recall was low (many visible dots unmarked) and the dense page was
+too crowded to judge by eye. Review against the image; do not treat as ground truth.
+
 ## Open questions
 
 - Whether any MAKHZAN Ottoman Turkish manuscripts overlap with material already used elsewhere

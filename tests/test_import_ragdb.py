@@ -88,3 +88,16 @@ def test_keep_empty_retains_textless_lines(tmp_path):
     export, images = _write_junk_export(tmp_path)
     written = convert_ragdb_export(export, images, tmp_path / "out", keep_empty=True)
     assert [p.name for p in written] == ["pg1.json", "pg2.json"]
+
+
+def test_excluded_pages_are_skipped_and_reported(tmp_path):
+    export, images = _write_junk_export(tmp_path)
+    dropped = []
+
+    written = convert_ragdb_export(
+        export, images, tmp_path / "out", keep_empty=True, exclude_pages={"pg1"}, dropped=dropped
+    )
+
+    assert [p.name for p in written] == ["pg2.json"]
+    assert ("pg1", -1, "excluded_page") in dropped
+    assert not (tmp_path / "out" / "pg1.json").exists()
