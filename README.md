@@ -140,8 +140,22 @@ python -m ottoman_htr.ablation path/to/train_dir path/to/val_dir \
 
 Trains all three arms (`binary`/`neural`/`fuzzy` — see `model.build_model`) on identical
 data/hyperparameters and writes a `best_val_cer`/`best_val_wer` comparison to
-`ablation_summary.json`. Not yet run for the full 150 epochs per arm (~3× a single training
-run's time) — that's the next real result to produce.
+`ablation_summary.json`. **Now run for the full 150 epochs per arm** (`runs/ablation_150ep/`,
+~8h wall time across all three): all three arms plateau in the same 0.83–0.89 val CER band, with
+no arm winning cleanly on both metrics —
+
+| Arm | best val CER | best val WER | best epoch |
+|---|---|---|---|
+| A — binarization + OCR | 0.8294 | 1.0006 | 125 |
+| B — raw image + CNN/CTC | 0.8265 | 1.0794 | 98 |
+| C — geometry + fuzzy fusion (this project's proposal) | 0.8403 | **0.9994** | 133 |
+
+C (this project's own proposed architecture) gets the best val WER but the worst val CER of the
+three, and none of them reach the ≈0.79 CER the Tier-1 single-arm run above found — this ablation
+ran on whatever the Tier-1 split provides, not yet the larger Tier-2-annotated corpus, so read
+this as "the three architectures are close, not yet as evidence for or against the fuzzy-fusion
+hypothesis" rather than a result to design further training around. More/better data (Tier-2
+annotation) is still the next lever, same conclusion as the single-arm run above.
 
 ## Running
 
